@@ -593,3 +593,22 @@ html { -webkit-tap-highlight-color: transparent; }
   .cat { grid-template-columns: 112px minmax(0, 1fr) 40px; font-size: 13px; }
   .score-hero .hero-cta .btn { flex: 1; }
 }
+
+/* ============ „მარტივად" ახსნა ============ */
+.explain-btn {
+  display: inline-flex; align-items: center; gap: 8px; margin-top: 18px;
+  padding: 9px 14px; border-radius: 10px; cursor: pointer;
+  background: transparent; border: 1px dashed var(--t-open);
+  color: var(--t-open); font-weight: 600; font-size: 14px; text-align: left;
+  touch-action: manipulation;
+}
+.explain-btn:hover { background: color-mix(in srgb, var(--t-open) 12%, transparent); }
+.explain {
+  margin-top: 22px; padding: 18px 22px; border-radius: var(--r-md);
+  background: color-mix(in srgb, var(--t-open) 10%, var(--surface));
+  border: 1px solid color-mix(in srgb, var(--t-open) 45%, transparent);
+  animation: rise .28s cubic-bezier(.2,.8,.2,1);
+}
+.explain-label { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 700; color: var(--t-open); margin-bottom: 8px; }
+.explain .prose strong { color: var(--t-open); }
+@media (max-width: 640px) { .explain { padding: 14px 16px; } .explain-btn { width: 100%; justify-content: center; } }

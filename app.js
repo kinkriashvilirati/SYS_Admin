@@ -299,6 +299,17 @@
       return '<button type="button" class="' + cls + '" data-act="' + act + '" data-i="' + i + '"' + (revealed ? ' disabled' : '') + ' aria-pressed="' + (picked === i) + '" aria-label="' + LET[i] + ') ' + esc(o) + status + '"><span class="let">' + LET[i] + '</span><span class="txt">' + esc(o) + '</span><span class="mark">' + mark + '</span></button>';
     }).join('') + '</div>';
   }
+  const EXPL = (typeof window !== 'undefined' && window.EXPLAIN) || {};
+  const BULB = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18h6M10 21h4"/><path d="M12 3a6 6 0 0 0-3.5 10.9c.6.5 1 1.2 1 2.1h5c0-.9.4-1.6 1-2.1A6 6 0 0 0 12 3z"/></svg>';
+  function explainHtml(qtext) {
+    const t = EXPL[qtext]; if (!t) return '';
+    const body = t.replace(/^(რას გეკითხება:|მარტივად:)/gm, '**$1**');
+    return '<div class="explain"><div class="explain-label">' + BULB + 'მარტივად</div><div class="prose">' + fmt(body) + '</div></div>';
+  }
+  function explainBtn(qid, qtext, before) {
+    if (!EXPL[qtext]) return '';
+    return '<button type="button" class="explain-btn" data-act="explain" data-id="' + esc(qid) + '">' + BULB + (before ? 'კითხვა ვერ გავიგე — ამიხსენი მარტივად' : 'ვერ გავიგე — ამიხსენი მარტივად') + '</button>';
+  }
   function noteHtml(note) { return note ? '<div class="note">' + IC.info + '<span>' + esc(note) + '</span></div>' : ''; }
   function answerHtml(q) {
     return '<div class="answer"><div class="answer-label">' + IC.check.replace('<svg', '<svg width="14" height="14"') + 'პასუხი</div><div class="prose">' + fmt(q.a) + '</div></div>';
@@ -314,7 +325,12 @@
         if (picked !== null && picked !== undefined) body += verdictHtml(q.correct.includes(picked), q.correct, q.options);
         body += noteHtml(q.note);
       }
-    } else if (revealed) body += answerHtml(q);
+    } else {
+      const explained = U.explainKey === q.id;
+      if (explained) body += explainHtml(q.q);
+      if (revealed || explained) body += answerHtml(q);
+      if (!explained) body += explainBtn(q.id, q.q, !revealed);
+    }
     return '<article class="panel card t-' + q.type + (anim ? ' enter' : '') + '" aria-label="კითხვა">' +
       '<header class="card-head">' + typeTag(q.type) + (q.variation ? '<span class="tag var">ვარიაცია</span>' : '') +
       '<span class="src">' + esc(srcLabel(q)) + '</span><span class="spacer"></span>' + (headExtra || '') + '</header>' +
@@ -592,6 +608,8 @@
         body += '<div class="compare">' +
           '<div class="answer mine"><div class="answer-label">შენი პასუხი</div><div class="prose">' + (it.answer.trim() ? fmt(it.answer) : '<p class="empty">— არაფერი დაგიწერია —</p>') + '</div></div>' +
           '<div class="answer"><div class="answer-label">სწორი პასუხი</div><div class="prose">' + fmt(it.a) + '</div></div></div>';
+        const eq = byId.get(it.qid);
+        if (eq) body += U.explainKey === eq.id ? explainHtml(eq.q) : explainBtn(eq.id, eq.q, false);
         actions = it.result === null
           ? '<span class="ask">შეადარე და შეაფასე შენი პასუხი:</span><button class="btn btn-bad btn-lg" data-act="examGrade" data-v="0">' + IC.x.replace('<svg', '<svg class="ic"') + 'არასწორია <kbd>1</kbd></button><button class="btn btn-ok btn-lg" data-act="examGrade" data-v="1">' + IC.check.replace('<svg', '<svg class="ic"') + 'სწორია <kbd>2</kbd></button>'
           : '';
@@ -654,6 +672,12 @@
 
   const A = {
     askConfirm(d) { U.confirm = d.key; },
+    explain(d) {
+      U.explainKey = d.id;
+      const r = route();
+      if (r === 'flash') U.fRevealed = true;
+      if (r === 'all') U.aRevealed = true;
+    },
     cancelConfirm() { U.confirm = null; },
 
     flashReveal() { U.fRevealed = true; announce('პასუხი გაიხსნა'); },
