@@ -107,7 +107,14 @@
         distract = take((x) => x.term, d.term);
       }
       const options = shuffle([correctText].concat(distract), rnd);
+      const all = [d].concat(pool);
+      const why = options.map((o) => {
+        const src = all.find((x) => (style === 'forward' ? Logic.stripExpansion(x.a) === o : x.term === o));
+        if (!src) return '';
+        return style === 'forward' ? 'ეს არის „' + src.term + '"-ის განმარტება.' : src.term + ' — ' + Logic.stripExpansion(src.a);
+      });
       return {
+        why,
         kind: 'mcq', qid: 'gen:' + d.id + ':' + style, src: 'generated', from: d.id, quiz: d.quiz,
         q, options, correct: [options.indexOf(correctText)],
         note: 'ეს ტესტი ავტომატურად აეწყო ტერმინის „' + d.term + '" განმარტებიდან.',
@@ -121,6 +128,7 @@
         options: order.map((i) => q.options[i]),
         correct: q.correct.map((c) => order.indexOf(c)),
         note: q.note || '',
+        why: (function () { const W = typeof window !== 'undefined' && window.WHY && window.WHY[q.q]; return W ? order.map((i) => W[i]) : null; })(),
       };
     },
 
@@ -183,7 +191,7 @@
 
   const KEY = 'sysadmin-midterm-v1';
   const defaults = () => ({
-    flash: { learned: {}, miss: {}, quiz: 'all', review: false, current: null },
+    flash: { learned: {}, miss: {}, quiz: 'all', review: false, current: null, hist: [] },
     all: { type: 'all', quiz: 'all', order: 'seq', seed: 1, idx: 0, seen: {} },
     exam: { current: null, history: [], recent: [] },
   });
@@ -210,6 +218,9 @@
   try { localStorage.setItem(KEY + '-t', '1'); localStorage.removeItem(KEY + '-t'); } catch (e) { storageOK = false; }
 
   const S = load();
+  // გვერდის დახურვა/განახლებისას ბოლო მოქმედება არ დაიკარგოს
+  window.addEventListener('pagehide', () => save(true));
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') save(true); });
   // წაშლილი კითხვების ნარჩენების გასუფთავება
   Object.keys(S.flash.learned).forEach((id) => { if (!byId.has(id)) delete S.flash.learned[id]; });
 
@@ -247,6 +258,7 @@
     warn: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l9.5 17h-19z"/><path d="M12 10v4M12 17.5v.01"/></svg>',
     disk: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 10h18M7 7h.01M7 14h.01"/></svg>',
     flag: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 21V4M5 4h11l-2 4 2 4H5"/></svg>',
+    undo: '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 14L4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg>',
     reset: '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></svg>',
   };
   function ring(value, total, cls, label) {
@@ -287,7 +299,7 @@
     if (q.type === 'open') return '<p class="kicker">უპასუხე კითხვას</p><h2 class="qtext">' + esc(q.q) + '</h2>';
     return '<p class="kicker">აირჩიე სწორი პასუხი</p><h2 class="qtext">' + esc(q.q) + '</h2>';
   }
-  function optionsHtml(options, correct, picked, revealed, act) {
+  function optionsHtml(options, correct, picked, revealed, act, why) {
     return '<div class="options" role="group" aria-label="პასუხის ვარიანტები">' + options.map((o, i) => {
       let cls = 'opt'; let mark = '';
       if (revealed) {
@@ -296,7 +308,7 @@
         else cls += ' dim';
       } else if (picked === i) cls += ' sel';
       const status = revealed ? (correct.includes(i) ? ' (სწორი პასუხი)' : (picked === i ? ' (შენი არჩევანი, არასწორი)' : '')) : '';
-      return '<button type="button" class="' + cls + '" data-act="' + act + '" data-i="' + i + '"' + (revealed ? ' disabled' : '') + ' aria-pressed="' + (picked === i) + '" aria-label="' + LET[i] + ') ' + esc(o) + status + '"><span class="let">' + LET[i] + '</span><span class="txt">' + esc(o) + '</span><span class="mark">' + mark + '</span></button>';
+      return '<button type="button" class="' + cls + '" data-act="' + act + '" data-i="' + i + '"' + (revealed ? ' disabled' : '') + ' aria-pressed="' + (picked === i) + '" aria-label="' + LET[i] + ') ' + esc(o) + status + '"><span class="let">' + LET[i] + '</span><span class="txt">' + esc(o) + (revealed && why && why[i] ? '<span class="why">' + esc(why[i]) + '</span>' : '') + '</span><span class="mark">' + mark + '</span></button>';
     }).join('') + '</div>';
   }
   const EXPL = (typeof window !== 'undefined' && window.EXPLAIN) || {};
@@ -320,7 +332,7 @@
     const anim = U.anim && U.lastCard !== key; U.lastCard = key;
     let body = prompt(q);
     if (q.type === 'mcq') {
-      body += optionsHtml(q.options, q.correct, picked, revealed, pickAct);
+      body += optionsHtml(q.options, q.correct, picked, revealed, pickAct, (window.WHY || {})[q.q]);
       if (revealed) {
         if (picked !== null && picked !== undefined) body += verdictHtml(q.correct.includes(picked), q.correct, q.options);
         body += noteHtml(q.note);
@@ -434,10 +446,10 @@
       main = doneCard('neutral', IC.info, 'ამ ფილტრში კითხვა არ არის', 'აირჩიე სხვა ქვიზი მარჯვნივ.', '');
     } else if (!q && !f.review) {
       main = doneCard('', IC.check, 'ყველა ბარათი ისწავლე!', 'ამ თემის ' + ids.length + '-ვე კითხვა მონიშნე „ვიცი"-თ. ახლა სცადე გამოცდა ან გადახედე ნასწავლს.',
-        '<a class="btn btn-primary" href="#/exam">გამოცდის დაწყება</a><button class="btn" data-act="flashMode" data-v="review">ნასწავლის გადახედვა</button>');
+        '<a class="btn btn-primary" href="#/exam">გამოცდის დაწყება</a><button class="btn" data-act="flashMode" data-v="review">ნასწავლის გადახედვა</button>' + (S.flash.hist.length ? undoBtn('flashUndo') : ''));
     } else if (!q && f.review) {
       main = learnedN
-        ? doneCard('', IC.check, 'გადახედვა დასრულდა', 'ყველა ნასწავლი ბარათი ნახე. რაც დაგავიწყდა, ისევ სასწავლ რიგში დაბრუნდა.', '<button class="btn btn-primary" data-act="flashAgain">კიდევ ერთხელ</button><button class="btn" data-act="flashMode" data-v="learn">სწავლაზე დაბრუნება</button>')
+        ? doneCard('', IC.check, 'გადახედვა დასრულდა', 'ყველა ნასწავლი ბარათი ნახე. რაც დაგავიწყდა, ისევ სასწავლ რიგში დაბრუნდა.', '<button class="btn btn-primary" data-act="flashAgain">კიდევ ერთხელ</button><button class="btn" data-act="flashMode" data-v="learn">სწავლაზე დაბრუნება</button>' + (S.flash.hist.length ? undoBtn('flashUndo') : ''))
         : doneCard('neutral', IC.info, 'ჯერ არაფერი გისწავლია', 'როცა ბარათზე „ვიცი"-ს დააჭერ, ის აქ გამოჩნდება.', '<button class="btn btn-primary" data-act="flashMode" data-v="learn">სწავლის დაწყება</button>');
     } else {
       const miss = f.miss[q.id] || 0;
@@ -452,6 +464,7 @@
       } else {
         actions = '<span class="ask">ისევ გახსოვს?</span><button class="btn btn-bad btn-lg" data-act="flashForgot">დამავიწყდა <kbd>1</kbd></button><button class="btn btn-ok btn-lg" data-act="flashKeep">ისევ ვიცი <kbd>2</kbd></button>';
       }
+      actions = undoBtn('flashUndo', !S.flash.hist.length) + actions;
       main = studyCard(q, U.fRevealed, U.fPicked, 'flashPick', head, actions);
     }
 
@@ -471,12 +484,13 @@
         '<div class="rail-actions">' + confirmBtn('flashReset', f.quiz === 'all' ? 'ყველაფრის თავიდან დაწყება' : 'ამ ქვიზის თავიდან დაწყება', 'flashReset') + '</div>' +
       '</div>' +
       '<div class="panel keys" aria-label="კლავიშები"><div class="panel-title" style="margin-bottom:4px">კლავიშები</div>' +
-        '<div><span>პასუხის ნახვა</span><kbd>Space</kbd></div><div><span>არ ვიცი</span><kbd>1</kbd></div><div><span>ვიცი</span><kbd>2</kbd></div></div>' +
+        '<div><span>პასუხის ნახვა</span><kbd>Space</kbd></div><div><span>არ ვიცი</span><kbd>1</kbd></div><div><span>ვიცი</span><kbd>2</kbd></div><div><span>უკან</span><kbd>Ctrl+Z</kbd></div></div>' +
     '</aside>';
 
     return '<div class="page-head"><div><h1>ბარათები</h1><p>' + (f.review ? 'ნასწავლი ბარათების გადახედვა.' : 'გაიხსენე პასუხი, მერე შეამოწმე. „ვიცი" — ბარათი ქრება, „არ ვიცი" — მოგვიანებით დაბრუნდება.') + '</p></div></div>' +
       '<div class="study"><div>' + main + '</div>' + rail + '</div>';
   }
+  const undoBtn = (act, off) => '<button class="btn btn-lg undo" data-act="' + act + '"' + (off ? ' disabled' : '') + ' title="Ctrl+Z" aria-label="უკან — ბოლო მოქმედების გაუქმება">' + IC.undo + 'უკან</button>';
   function doneCard(kind, icon, title, text, actions) {
     return '<article class="panel card done enter"><div class="done-badge ' + kind + '">' + icon + '</div><h2>' + title + '</h2><p>' + text + '</p>' + (actions ? '<div class="card-actions">' + actions + '</div>' : '') + '</article>';
   }
@@ -592,7 +606,7 @@
 
     let body; let actions;
     if (it.kind === 'mcq') {
-      body = '<p class="kicker">აირჩიე სწორი პასუხი</p><h2 class="qtext">' + esc(it.q) + '</h2>' + optionsHtml(it.options, it.correct, it.picked, it.submitted, 'examPick');
+      body = '<p class="kicker">აირჩიე სწორი პასუხი</p><h2 class="qtext">' + esc(it.q) + '</h2>' + optionsHtml(it.options, it.correct, it.picked, it.submitted, 'examPick', it.why);
       if (it.submitted) body += verdictHtml(it.result, it.correct, it.options) + noteHtml(it.note);
       actions = it.submitted
         ? '<span class="grow"></span><button class="btn btn-primary btn-lg" data-act="examNext">' + (ex.pos === ex.items.length - 1 ? 'შედეგების ნახვა' : 'შემდეგი კითხვა') + IC.arrow + ' <kbd>Enter</kbd></button>'
@@ -615,6 +629,7 @@
           : '';
       }
     }
+    actions = undoBtn('examUndo', !(it.submitted || ex.pos > 0)) + actions;
     const card = '<article class="panel card t-' + it.kind + (anim ? ' enter' : '') + '" aria-label="გამოცდის კითხვა ' + (ex.pos + 1) + '">' +
       '<header class="card-head">' + typeTag(it.kind) + (it.src === 'generated' || it.src === 'variation' ? '<span class="tag var">ვარიაცია</span>' : '') +
       '<span class="src">' + esc(srcTxt) + '</span><span class="spacer"></span><span class="counter">კითხვა <b>' + (ex.pos + 1) + '</b> / ' + ex.items.length + '</span></header>' +
@@ -627,7 +642,7 @@
         '<div class="kv"><span>სწორი</span><b>' + sc.correct + '</b></div><div class="kv"><span>არასწორი</span><b>' + (answered - sc.correct) + '</b></div><div class="kv"><span>დარჩა</span><b>' + (ex.items.length - answered) + '</b></div>' +
       '</div>' +
       '<div class="panel keys"><div class="panel-title" style="margin-bottom:4px">კლავიშები</div>' +
-        '<div><span>ვარიანტის არჩევა</span><kbd>1–4</kbd></div><div><span>დადასტურება / შემდეგი</span><kbd>Enter</kbd></div><div><span>პასუხის შემოწმება</span><kbd>Ctrl+Enter</kbd></div><div><span>არასწორია / სწორია</span><span><kbd>1</kbd> <kbd>2</kbd></span></div></div>' +
+        '<div><span>ვარიანტის არჩევა</span><kbd>1–4</kbd></div><div><span>დადასტურება / შემდეგი</span><kbd>Enter</kbd></div><div><span>პასუხის შემოწმება</span><kbd>Ctrl+Enter</kbd></div><div><span>არასწორია / სწორია</span><span><kbd>1</kbd> <kbd>2</kbd></span></div><div><span>უკან</span><kbd>Ctrl+Z</kbd></div></div>' +
       '<div class="panel">' + confirmBtn('examQuit', 'გამოცდის შეწყვეტა', 'examQuit') + '</div>' +
     '</aside>';
 
@@ -649,9 +664,10 @@
       const res = '<span class="res ' + (ok ? 'ok' : 'bad') + '">' + (ok ? IC.check + 'სწორი' : IC.x + 'არასწორი') + '</span>';
       let detail;
       if (it.kind === 'mcq') {
-        const mine = it.picked === null ? '— არ აგირჩევია —' : LET[it.picked] + ') ' + it.options[it.picked];
-        const right = it.correct.map((c) => LET[c] + ') ' + it.options[c]).join('\nან: ');
-        detail = '<div class="compare"><div class="answer mine"><div class="answer-label">შენი არჩევანი</div><div class="prose"><p>' + esc(mine) + '</p></div></div><div class="answer"><div class="answer-label">სწორი პასუხი</div><div class="prose">' + fmt(right) + (it.note ? '<p class="muted" style="font-size:14px;margin-top:8px">' + esc(it.note) + '</p>' : '') + '</div></div></div>';
+        const w = (i) => (it.why && it.why[i] ? '\n' + it.why[i] : '');
+        const mine = it.picked === null ? '— არ აგირჩევია —' : LET[it.picked] + ') ' + it.options[it.picked] + w(it.picked);
+        const right = it.correct.map((c) => LET[c] + ') ' + it.options[c] + w(c)).join('\nან: ');
+        detail = '<div class="compare"><div class="answer mine"><div class="answer-label">შენი არჩევანი</div><div class="prose">' + fmt(mine) + '</div></div><div class="answer"><div class="answer-label">სწორი პასუხი</div><div class="prose">' + fmt(right) + (it.note ? '<p class="muted" style="font-size:14px;margin-top:8px">' + esc(it.note) + '</p>' : '') + '</div></div></div>';
       } else {
         detail = '<div class="compare"><div class="answer mine"><div class="answer-label">შენი პასუხი</div><div class="prose">' + (it.answer.trim() ? fmt(it.answer) : '<p class="empty">— არაფერი დაგიწერია —</p>') + '</div></div><div class="answer"><div class="answer-label">სწორი პასუხი</div><div class="prose">' + fmt(it.a) + '</div></div></div>';
       }
@@ -683,26 +699,36 @@
     flashReveal() { U.fRevealed = true; announce('პასუხი გაიხსნა'); },
     flashPick(d) { if (U.fRevealed) return; U.fPicked = +d.i; U.fRevealed = true; const q = byId.get(U.fq[0]); announce(q && q.correct.includes(+d.i) ? 'სწორია' : 'არასწორია'); },
     flashYes() {
-      const id = U.fq[0]; if (!id) return;
+      const id = U.fq[0]; if (!id) return; flashSnap(id);
       S.flash.learned[id] = Date.now(); U.fq.shift(); S.flash.current = U.fq[0] || null;
       U.fRevealed = false; U.fPicked = null; save(); announce('მოინიშნა: ვიცი');
     },
     flashNo() {
-      const id = U.fq[0]; if (!id) return;
+      const id = U.fq[0]; if (!id) return; flashSnap(id);
       const m = (S.flash.miss[id] || 0) + 1; S.flash.miss[id] = m;
       U.fq = Logic.requeue(U.fq, id, m); S.flash.current = U.fq[0];
       U.fRevealed = false; U.fPicked = null; save(); announce('მოგვიანებით დაბრუნდება');
     },
     flashForgot() {
-      const id = U.fq[0]; if (!id) return;
+      const id = U.fq[0]; if (!id) return; flashSnap(id);
       delete S.flash.learned[id]; S.flash.miss[id] = (S.flash.miss[id] || 0) + 1;
       U.fq.shift(); U.fRevealed = false; U.fPicked = null; save(); announce('ბარათი დაბრუნდა სასწავლ რიგში');
     },
-    flashKeep() { U.fq.shift(); U.fRevealed = false; U.fPicked = null; },
-    flashAgain() { ensureQueue(true); },
-    flashQuiz(d) { S.flash.quiz = d.v; S.flash.current = null; ensureQueue(true); save(); },
-    flashMode(d) { S.flash.review = d.v === 'review'; ensureQueue(true); save(); },
+    flashKeep() { if (!U.fq[0]) return; flashSnap(U.fq[0]); U.fq.shift(); U.fRevealed = false; U.fPicked = null; },
+    flashUndo() {
+      const h = S.flash.hist.pop(); if (!h) return;
+      if (h.key !== U.fqKey) { S.flash.hist = []; return; }
+      if (h.learned === undefined) delete S.flash.learned[h.id]; else S.flash.learned[h.id] = h.learned;
+      if (h.miss === undefined) delete S.flash.miss[h.id]; else S.flash.miss[h.id] = h.miss;
+      U.fq = h.q; if (!S.flash.review) S.flash.current = h.id;
+      U.fRevealed = false; U.fPicked = null; U.explainKey = null; U.lastCard = null;
+      save(); announce('დაბრუნდა წინა ბარათზე');
+    },
+    flashAgain() { S.flash.hist = []; ensureQueue(true); },
+    flashQuiz(d) { S.flash.hist = []; S.flash.quiz = d.v; S.flash.current = null; ensureQueue(true); save(); },
+    flashMode(d) { S.flash.hist = []; S.flash.review = d.v === 'review'; ensureQueue(true); save(); },
     flashReset() {
+      S.flash.hist = [];
       flashIds().forEach((id) => { delete S.flash.learned[id]; delete S.flash.miss[id]; });
       S.flash.review = false; S.flash.current = null; U.confirm = null; ensureQueue(true); save(true); announce('პროგრესი განულდა');
     },
@@ -754,10 +780,21 @@
       }
       save(true);
     },
+    examUndo() {
+      const ex = S.exam.current; if (!ex || ex.finished) return;
+      let it = ex.items[ex.pos];
+      if (!it.submitted) { if (ex.pos === 0) return; ex.pos--; it = ex.items[ex.pos]; }
+      it.submitted = false; it.result = null; if (it.kind === 'mcq') it.picked = null; else it.answer = '';
+      U.explainKey = null; U.lastCard = null; save(true); announce('დაბრუნდა წინა კითხვაზე');
+    },
     examQuit() { S.exam.current = null; U.confirm = null; save(true); },
     examClose() { S.exam.current = null; save(true); },
     resFilter(d) { U.resFilter = d.v; },
   };
+  function flashSnap(id) {
+    S.flash.hist.push({ id, learned: S.flash.learned[id], miss: S.flash.miss[id], q: U.fq.slice(), key: U.fqKey });
+    if (S.flash.hist.length > 30) S.flash.hist.shift();
+  }
   function cur() { const ex = S.exam.current; return ex && !ex.finished ? ex.items[ex.pos] : null; }
 
   /* ───────────────────────── როუტინგი და რენდერი ───────────────────────── */
@@ -814,6 +851,13 @@
   }
 
   document.addEventListener('keydown', (e) => {
+    if ((e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey && e.code === 'KeyZ') {
+      const tg = (e.target.tagName || '').toLowerCase();
+      if (tg === 'textarea' || tg === 'input') return; // ტექსტში — ჩვეულებრივი Ctrl+Z
+      const rr = route();
+      if (rr === 'flash' || rr === 'exam') { e.preventDefault(); run(rr === 'flash' ? 'flashUndo' : 'examUndo'); }
+      return;
+    }
     if (e.metaKey || e.altKey) return;
     const t = e.target; const tag = (t.tagName || '').toLowerCase();
     const r = route();

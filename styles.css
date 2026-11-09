@@ -612,3 +612,14 @@ html { -webkit-tap-highlight-color: transparent; }
 .explain-label { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 700; color: var(--t-open); margin-bottom: 8px; }
 .explain .prose strong { color: var(--t-open); }
 @media (max-width: 640px) { .explain { padding: 14px 16px; } .explain-btn { width: 100%; justify-content: center; } }
+
+/* ============ ტესტის ვარიანტების ახსნა ============ */
+.opt .why { display: block; margin-top: 5px; font-size: 13.5px; line-height: 1.45; color: var(--text-2); font-weight: 400; }
+.opt.right .why { color: var(--ok); }
+.opt.wrong .why { color: var(--bad); }
+.opt.dim { opacity: .82; }
+.opt.dim .let { opacity: .6; }
+
+/* „უკან" ღილაკი */
+.card-actions .btn.undo { flex: 0 0 auto; min-width: 0; padding: 0 16px; }
+@media (max-width: 640px) { .card-actions .btn.undo { flex: 0 0 auto; padding: 0 12px; } }
