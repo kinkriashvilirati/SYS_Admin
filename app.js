@@ -316,7 +316,20 @@
   function explainHtml(qtext) {
     const t = EXPL[qtext]; if (!t) return '';
     const body = t.replace(/^(რას გეკითხება:|მარტივად:)/gm, '**$1**');
-    return '<div class="explain"><div class="explain-label">' + BULB + 'მარტივად</div><div class="prose">' + fmt(body) + '</div></div>';
+    return '<div class="explain"><div class="explain-label">' + BULB + 'მარტივად' + '<button type="button" class="explain-close" data-act="closeExplain" aria-label="ახსნის დახურვა">✕ დახურვა</button>' + '</div><div class="prose">' + fmt(body) + '</div></div>';
+  }
+  // ტესტის კითხვის ახსნა (პასუხს არ ამხელს)
+  function qExplainText(qtext, genTerm) {
+    const Q = (typeof window !== 'undefined' && window.QEXPLAIN) || {};
+    if (Q[qtext]) return Q[qtext];
+    if (genTerm) return 'რას გეკითხება: ოთხი ვარიანტიდან აირჩიე ის, რომელიც ზუსტად შეესაბამება ტერმინს „' + genTerm + '" — ან, თუ კითხვაში განმარტებაა მოცემული, ის ტერმინი, რომელსაც ეს განმარტება აღწერს.\nმინიშნება: ვარიანტები სხვა ტერმინების განმარტებებია იმავე თემიდან.';
+    return '';
+  }
+  function qExplainBlock(key, qtext, genTerm) {
+    const t = qExplainText(qtext, genTerm); if (!t) return '';
+    if (U.qExplainKey !== key) return '<button type="button" class="explain-btn" data-act="qexplain" data-id="' + esc(key) + '">' + BULB + 'კითხვა ვერ გავიგე — ამიხსენი (პასუხს არ გაგიმხელს)</button>';
+    const body = t.replace(/^(რას გეკითხება:|ტერმინები:|მინიშნება:)/gm, '**$1**');
+    return '<div class="explain"><div class="explain-label">' + BULB + 'რას გეკითხება კითხვა' + '<button type="button" class="explain-close" data-act="closeExplain" aria-label="ახსნის დახურვა">✕ დახურვა</button>' + '</div><div class="prose">' + fmt(body) + '</div></div>';
   }
   function explainBtn(qid, qtext, before) {
     if (!EXPL[qtext]) return '';
@@ -332,7 +345,7 @@
     const anim = U.anim && U.lastCard !== key; U.lastCard = key;
     let body = prompt(q);
     if (q.type === 'mcq') {
-      body += optionsHtml(q.options, q.correct, picked, revealed, pickAct, (window.WHY || {})[q.q]);
+      body += qExplainBlock(q.id, q.q) + optionsHtml(q.options, q.correct, picked, revealed, pickAct, (window.WHY || {})[q.q]);
       if (revealed) {
         if (picked !== null && picked !== undefined) body += verdictHtml(q.correct.includes(picked), q.correct, q.options);
         body += noteHtml(q.note);
@@ -606,7 +619,8 @@
 
     let body; let actions;
     if (it.kind === 'mcq') {
-      body = '<p class="kicker">აირჩიე სწორი პასუხი</p><h2 class="qtext">' + esc(it.q) + '</h2>' + optionsHtml(it.options, it.correct, it.picked, it.submitted, 'examPick', it.why);
+      const genD = it.from ? byId.get(it.from) : null;
+      body = '<p class="kicker">აირჩიე სწორი პასუხი</p><h2 class="qtext">' + esc(it.q) + '</h2>' + qExplainBlock(ex.id + ':' + ex.pos, it.q, genD && genD.term) + optionsHtml(it.options, it.correct, it.picked, it.submitted, 'examPick', it.why);
       if (it.submitted) body += verdictHtml(it.result, it.correct, it.options) + noteHtml(it.note);
       actions = it.submitted
         ? '<span class="grow"></span><button class="btn btn-primary btn-lg" data-act="examNext">' + (ex.pos === ex.items.length - 1 ? 'შედეგების ნახვა' : 'შემდეგი კითხვა') + IC.arrow + ' <kbd>Enter</kbd></button>'
@@ -688,6 +702,8 @@
 
   const A = {
     askConfirm(d) { U.confirm = d.key; },
+    qexplain(d) { U.qExplainKey = d.id; },
+    closeExplain() { U.qExplainKey = null; U.explainKey = null; },
     explain(d) {
       U.explainKey = d.id;
       const r = route();
@@ -821,7 +837,7 @@
     }
   }
 
-  window.addEventListener('hashchange', () => { U.confirm = null; U.lastCard = null; render(); window.scrollTo({ top: 0 }); app.focus({ preventScroll: true }); });
+  window.addEventListener('hashchange', () => { U.confirm = null; U.qExplainKey = null; U.explainKey = null; U.lastCard = null; render(); window.scrollTo({ top: 0 }); app.focus({ preventScroll: true }); });
 
   app.addEventListener('click', (e) => {
     const el = e.target.closest('[data-act]');
@@ -830,6 +846,7 @@
     e.preventDefault();
     const act = el.dataset.act; const v = el.dataset.v;
     const isFilter = el.classList.contains('choice') || !!el.closest('.seg');
+    closeIfNext(act);
     fn(el.dataset);
     render();
     // ფილტრზე — ფოკუსი რჩება არჩეულ ღილაკზე; სხვა შემთხვევაში — ბარათზე (კლავიშებისთვის)
@@ -844,8 +861,13 @@
     if (e.target.dataset.input === 'examAnswer') { const it = cur(); if (it) { it.answer = e.target.value; save(); } }
   });
 
+  // ამ მოქმედებებზე სხვა კითხვაზე გადავდივართ — ახსნა ავტომატურად იხურება
+  const NEXT_ACTS = new Set(['flashYes', 'flashNo', 'flashForgot', 'flashKeep', 'flashUndo', 'flashAgain', 'flashQuiz', 'flashMode', 'flashReset',
+    'allNext', 'allPrev', 'allRestart', 'allType', 'allQuiz', 'allOrder', 'examGrade', 'examNext', 'examUndo', 'examStart', 'examQuit', 'examClose']);
+  function closeIfNext(act) { if (NEXT_ACTS.has(act)) { U.qExplainKey = null; U.explainKey = null; } }
   function run(act, data) {
     if (!A[act]) return;
+    closeIfNext(act);
     A[act](data || {}); render();
     if (!document.getElementById('ans')) app.focus({ preventScroll: true });
   }

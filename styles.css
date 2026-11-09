@@ -623,3 +623,13 @@ html { -webkit-tap-highlight-color: transparent; }
 /* „უკან" ღილაკი */
 .card-actions .btn.undo { flex: 0 0 auto; min-width: 0; padding: 0 16px; }
 @media (max-width: 640px) { .card-actions .btn.undo { flex: 0 0 auto; padding: 0 12px; } }
+/* „უკან" ღილაკი იმავე ხაზზე, მარჯვნივ (მობილურზე — მარცხნივ) */
+.card-actions .btn.undo { order: 5; margin-left: auto; }
+@media (max-width: 640px) { .card-actions .btn.undo { order: -2; margin-left: 0; } }
+/* ახსნის დახურვის ღილაკი */
+.explain-close {
+  margin-left: auto; padding: 5px 10px; border-radius: 8px; cursor: pointer;
+  background: transparent; border: 1px solid color-mix(in srgb, var(--t-open) 45%, transparent);
+  color: var(--t-open); font: inherit; font-size: 12.5px; font-weight: 700; touch-action: manipulation;
+}
+.explain-close:hover { background: color-mix(in srgb, var(--t-open) 15%, transparent); }
