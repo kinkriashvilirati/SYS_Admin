@@ -338,7 +338,7 @@
   }
   function shortBlock(kind, key, qtext) {
     const t = shortText(kind, qtext); if (!t || U.shortKey !== key) return '';
-    const warn = kind !== 'text' ? '' : '<div class="short-warn">' + IC.warn.replace('<svg', '<svg width="16" height="16"') + '<span><b>სახიფათოა გამოცდაზე ასე მოკლედ დაწერა!</b> ეს მხოლოდ დასამახსოვრებლადაა. გამოცდაზე სრული პასუხი დაწერე — მოკლე პასუხზე ქულა დაგაკლდება.</span></div>';
+    const warn = kind !== 'text' ? '' : '<div class="short-warn">⚠️ გამოცდაზე სრული პასუხი დაწერე</div>';
     return '<div class="short"><div class="short-label">' + ZAP + (kind !== 'text' ? 'დასამახსოვრებლად' : 'ყველაზე მოკლედ') + '<button type="button" class="explain-close" data-act="closeExplain" aria-label="დახურვა">✕ დახურვა</button></div><div class="short-text">' + fmt(t) + '</div>' + warn + '</div>';
   }
   function qExplainBlock(key, qtext, genTerm) {
