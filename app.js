@@ -229,7 +229,7 @@
   /* ───────────────────────── დამხმარეები ───────────────────────── */
 
   const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-  const inline = (s) => esc(s).replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+  const inline = (s) => esc(s).replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>').replace(/`(.+?)`/g, '<code>$1</code>');
   function fmt(text) {
     let html = ''; let inList = false;
     String(text || '').split('\n').forEach((raw) => {
@@ -325,6 +325,22 @@
     if (genTerm) return 'რას გეკითხება: ოთხი ვარიანტიდან აირჩიე ის, რომელიც ზუსტად შეესაბამება ტერმინს „' + genTerm + '" — ან, თუ კითხვაში განმარტებაა მოცემული, ის ტერმინი, რომელსაც ეს განმარტება აღწერს.\nმინიშნება: ვარიანტები სხვა ტერმინების განმარტებებია იმავე თემიდან.';
     return '';
   }
+  // ⚡ ყველაზე მოკლედ (ღია/განმარტება) და ⚡ დასამახსოვრებელი ხრიკი (ტესტი)
+  const ZAP = '<svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round" aria-hidden="true"><path d="M13 2L4 14h7l-1 8 9-12h-7z"/></svg>';
+  function shortText(kind, qtext) {
+    if (kind === 'gen') return qtext; // უკვე მზა ტექსტი (განმარტებიდან აწყობილი ტესტი)
+    const src = kind === 'mcq' ? window.HOOK : window.SHORT;
+    return (src && src[qtext]) || '';
+  }
+  function shortBtn(kind, key, qtext) {
+    if (!shortText(kind, qtext) || U.shortKey === key) return '';
+    return '<button type="button" class="short-btn" data-act="short" data-id="' + esc(key) + '">' + ZAP + (kind !== 'text' ? 'როგორ დავიმახსოვრო' : 'ყველაზე მოკლედ') + '</button>';
+  }
+  function shortBlock(kind, key, qtext) {
+    const t = shortText(kind, qtext); if (!t || U.shortKey !== key) return '';
+    const warn = kind !== 'text' ? '' : '<div class="short-warn">' + IC.warn.replace('<svg', '<svg width="16" height="16"') + '<span><b>სახიფათოა გამოცდაზე ასე მოკლედ დაწერა!</b> ეს მხოლოდ დასამახსოვრებლადაა. გამოცდაზე სრული პასუხი დაწერე — მოკლე პასუხზე ქულა დაგაკლდება.</span></div>';
+    return '<div class="short"><div class="short-label">' + ZAP + (kind !== 'text' ? 'დასამახსოვრებლად' : 'ყველაზე მოკლედ') + '<button type="button" class="explain-close" data-act="closeExplain" aria-label="დახურვა">✕ დახურვა</button></div><div class="short-text">' + fmt(t) + '</div>' + warn + '</div>';
+  }
   function qExplainBlock(key, qtext, genTerm) {
     const t = qExplainText(qtext, genTerm); if (!t) return '';
     if (U.qExplainKey !== key) return '<button type="button" class="explain-btn" data-act="qexplain" data-id="' + esc(key) + '">' + BULB + 'კითხვა ვერ გავიგე — ამიხსენი (პასუხს არ გაგიმხელს)</button>';
@@ -349,12 +365,17 @@
       if (revealed) {
         if (picked !== null && picked !== undefined) body += verdictHtml(q.correct.includes(picked), q.correct, q.options);
         body += noteHtml(q.note);
+        body += shortBlock('mcq', q.id, q.q);
+        const hb = shortBtn('mcq', q.id, q.q); if (hb) body += '<div class="help-row">' + hb + '</div>';
       }
     } else {
       const explained = U.explainKey === q.id;
+      const shorted = U.shortKey === q.id;
       if (explained) body += explainHtml(q.q);
-      if (revealed || explained) body += answerHtml(q);
-      if (!explained) body += explainBtn(q.id, q.q, !revealed);
+      body += shortBlock('text', q.id, q.q);
+      if (revealed || explained || shorted) body += answerHtml(q);
+      const btns = (explained ? '' : explainBtn(q.id, q.q, !revealed)) + shortBtn('text', q.id, q.q);
+      if (btns) body += '<div class="help-row">' + btns + '</div>';
     }
     return '<article class="panel card t-' + q.type + (anim ? ' enter' : '') + '" aria-label="კითხვა">' +
       '<header class="card-head">' + typeTag(q.type) + (q.variation ? '<span class="tag var">ვარიაცია</span>' : '') +
@@ -408,6 +429,7 @@
       '</aside>' +
     '</section>' +
 
+    '<a class="sos-banner" href="#/sos"><span class="sos-fire" aria-hidden="true">🔥</span><span><b>დრო არ გაქვს და არაფერი იცი?</b><small>2-საათიანი გეგმა + მთელი მასალის მთავარი ფაქტები ერთ გვერდზე</small></span><span class="mode-arrow">' + IC.arrow + '</span></a>' +
     '<section class="modes" aria-label="რეჟიმები">' +
       modeCard('#/flash', '01', 'ბარათები', 'ხედავ კითხვას, იხსენებ, ნახულობ პასუხს და აჭერ „ვიცი" ან „არ ვიცი". ნასწავლი ქრება, უცოდინარი ბრუნდება.', learned + ' / ' + QS.length + ' ნასწავლი') +
       modeCard('#/all', '02', 'ყველა კითხვა', 'მთელი მასალა ერთ ადგილას, გამოტოვების გარეშე. გადადი წინ/უკან და გახსენი პასუხი როცა გინდა.', QS.length + ' კითხვა') +
@@ -621,7 +643,15 @@
     if (it.kind === 'mcq') {
       const genD = it.from ? byId.get(it.from) : null;
       body = '<p class="kicker">აირჩიე სწორი პასუხი</p><h2 class="qtext">' + esc(it.q) + '</h2>' + qExplainBlock(ex.id + ':' + ex.pos, it.q, genD && genD.term) + optionsHtml(it.options, it.correct, it.picked, it.submitted, 'examPick', it.why);
-      if (it.submitted) body += verdictHtml(it.result, it.correct, it.options) + noteHtml(it.note);
+      if (it.submitted) {
+        body += verdictHtml(it.result, it.correct, it.options) + noteHtml(it.note);
+        const hk = ex.id + ':' + ex.pos + ':hook';
+        const gd = it.from ? byId.get(it.from) : null;
+        const hKind = gd ? 'gen' : 'mcq';
+        const hText = gd ? (gd.term + ' = ' + ((window.SHORT || {})[gd.q] || '')) : it.q;
+        body += shortBlock(hKind, hk, hText);
+        const hb = shortBtn(hKind, hk, hText); if (hb) body += '<div class="help-row">' + hb + '</div>';
+      }
       actions = it.submitted
         ? '<span class="grow"></span><button class="btn btn-primary btn-lg" data-act="examNext">' + (ex.pos === ex.items.length - 1 ? 'შედეგების ნახვა' : 'შემდეგი კითხვა') + IC.arrow + ' <kbd>Enter</kbd></button>'
         : '<span class="hint">აირჩიე ვარიანტი და დაადასტურე</span><span class="grow"></span><button class="btn btn-primary btn-lg" data-act="examSubmitMcq"' + (it.picked === null ? ' disabled' : '') + '>დადასტურება <kbd>Enter</kbd></button>';
@@ -637,7 +667,12 @@
           '<div class="answer mine"><div class="answer-label">შენი პასუხი</div><div class="prose">' + (it.answer.trim() ? fmt(it.answer) : '<p class="empty">— არაფერი დაგიწერია —</p>') + '</div></div>' +
           '<div class="answer"><div class="answer-label">სწორი პასუხი</div><div class="prose">' + fmt(it.a) + '</div></div></div>';
         const eq = byId.get(it.qid);
-        if (eq) body += U.explainKey === eq.id ? explainHtml(eq.q) : explainBtn(eq.id, eq.q, false);
+        if (eq) {
+          if (U.explainKey === eq.id) body += explainHtml(eq.q);
+          body += shortBlock('text', eq.id, eq.q);
+          const btns = (U.explainKey === eq.id ? '' : explainBtn(eq.id, eq.q, false)) + shortBtn('text', eq.id, eq.q);
+          if (btns) body += '<div class="help-row">' + btns + '</div>';
+        }
         actions = it.result === null
           ? '<span class="ask">შეადარე და შეაფასე შენი პასუხი:</span><button class="btn btn-bad btn-lg" data-act="examGrade" data-v="0">' + IC.x.replace('<svg', '<svg class="ic"') + 'არასწორია <kbd>1</kbd></button><button class="btn btn-ok btn-lg" data-act="examGrade" data-v="1">' + IC.check.replace('<svg', '<svg class="ic"') + 'სწორია <kbd>2</kbd></button>'
           : '';
@@ -698,12 +733,43 @@
       '<div class="review">' + (items || '<p class="empty-note">შეცდომა არ გქონია. 🎉</p>') + '</div>';
   }
 
+  /* ───────────────────────── 🔥 სწრაფად (დრო არ მაქვს) ───────────────────────── */
+
+  function viewSos() {
+    const D = window.SOS;
+    if (!D) return '<p class="empty-note">sos.js ვერ ჩაიტვირთა.</p>';
+    const plan = D.plan.map((st, i) => {
+      const btn = st.link.startsWith('#/')
+        ? '<a class="btn btn-sm" href="' + st.link + '">' + esc(st.cta) + IC.arrow + '</a>'
+        : '<button class="btn btn-sm" data-act="scrollTo" data-v="' + esc(st.link.slice(1)) + '">' + esc(st.cta) + IC.arrow + '</button>';
+      return '<div class="panel sos-step"><div class="sos-step-top"><span class="sos-n">' + (i + 1) + '</span><span class="sos-time">' + esc(st.time) + '</span></div><h3>' + esc(st.title) + '</h3><p>' + inline(st.text) + '</p>' + btn + '</div>';
+    }).join('');
+    const tips = '<ul class="sos-list">' + D.tips.map((t) => '<li>' + inline(t) + '</li>').join('') + '</ul>';
+    const ports = '<div class="ports">' + D.ports.map((r) => '<div class="port-row"><span class="pn">' + esc(r[0]) + '</span><b>' + esc(r[1]) + '</b><span class="pd">' + esc(r[2]) + '</span></div>').join('') + '</div>';
+    const sections = D.sections.map((sec) => '<section class="panel sos-sec"><header><span class="sos-ic" aria-hidden="true">' + sec.icon + '</span><h2>' + esc(sec.title) + '</h2><span class="tag">' + esc(sec.quiz) + '</span></header><ul class="sos-list">' + sec.items.map((t) => '<li>' + inline(t) + '</li>').join('') + '</ul></section>').join('');
+    return '<div class="page-head"><div><h1>🔥 დრო არ მაქვს — სწრაფი მომზადება</h1><p>რამდენიმე საათი გაქვს და არაფერი იცი? მიჰყევი ამ 4 ნაბიჯს (~2 საათი). თუ მხოლოდ 1 საათი გაქვს — გააკეთე 1 და 3.</p></div></div>' +
+      '<div class="sos-plan">' + plan + '</div>' +
+      '<div class="sos-two">' +
+        '<section class="panel panel-pad"><div class="panel-title">🎯 გამოცდის ხრიკები</div>' + tips + '</section>' +
+        '<section class="panel panel-pad"><div class="panel-title">🔢 პორტები (ტესტებში ხშირად მოდის)</div>' + ports + '</section>' +
+      '</div>' +
+      '<div id="sos-sheet" class="sos-head"><h2>📋 ყველაფერი ერთ გვერდზე</h2><p>ყველა ქვიზის მთავარი ფაქტები. მუქი სიტყვები — ყველაზე მნიშვნელოვანი.</p></div>' +
+      '<div class="sos-sheet">' + sections + '</div>' +
+      '<div class="sos-end panel panel-pad"><b>წაიკითხე?</b> ახლა გადადი ბარათებზე ან პირდაპირ საცდელ გამოცდაზე.<div class="hero-cta" style="margin-top:14px"><a class="btn btn-primary" href="#/flash">ბარათები' + IC.arrow + '</a><a class="btn" href="#/exam">საცდელი გამოცდა</a></div></div>';
+  }
+
   /* ───────────────────────── მოქმედებები ───────────────────────── */
 
   const A = {
     askConfirm(d) { U.confirm = d.key; },
     qexplain(d) { U.qExplainKey = d.id; },
-    closeExplain() { U.qExplainKey = null; U.explainKey = null; },
+    closeExplain() { U.qExplainKey = null; U.explainKey = null; U.shortKey = null; },
+    short(d) {
+      U.shortKey = d.id;
+      const r = route();
+      if (r === 'flash') U.fRevealed = true;
+      if (r === 'all') U.aRevealed = true;
+    },
     explain(d) {
       U.explainKey = d.id;
       const r = route();
@@ -806,6 +872,7 @@
     examQuit() { S.exam.current = null; U.confirm = null; save(true); },
     examClose() { S.exam.current = null; save(true); },
     resFilter(d) { U.resFilter = d.v; },
+    scrollTo(d) { const el = document.getElementById(d.v); if (el) setTimeout(() => window.scrollTo({ top: el.getBoundingClientRect().top + window.scrollY - 76, behavior: 'smooth' }), 0); },
   };
   function flashSnap(id) {
     S.flash.hist.push({ id, learned: S.flash.learned[id], miss: S.flash.miss[id], q: U.fq.slice(), key: U.fqKey });
@@ -816,7 +883,7 @@
   /* ───────────────────────── როუტინგი და რენდერი ───────────────────────── */
 
   const app = document.getElementById('app');
-  const routes = { '': viewHome, flash: viewFlash, all: viewAll, exam: () => (U.examError && !S.exam.current ? viewExamIntro(U.examError) : viewExam()) };
+  const routes = { sos: viewSos, '': viewHome, flash: viewFlash, all: viewAll, exam: () => (U.examError && !S.exam.current ? viewExamIntro(U.examError) : viewExam()) };
   const route = () => { const r = location.hash.replace(/^#\/?/, ''); return Object.prototype.hasOwnProperty.call(routes, r) ? r : ''; };
 
   function render() {
@@ -837,7 +904,7 @@
     }
   }
 
-  window.addEventListener('hashchange', () => { U.confirm = null; U.qExplainKey = null; U.explainKey = null; U.lastCard = null; render(); window.scrollTo({ top: 0 }); app.focus({ preventScroll: true }); });
+  window.addEventListener('hashchange', () => { U.confirm = null; U.qExplainKey = null; U.explainKey = null; U.shortKey = null; U.lastCard = null; render(); window.scrollTo({ top: 0 }); app.focus({ preventScroll: true }); });
 
   app.addEventListener('click', (e) => {
     const el = e.target.closest('[data-act]');
@@ -864,7 +931,7 @@
   // ამ მოქმედებებზე სხვა კითხვაზე გადავდივართ — ახსნა ავტომატურად იხურება
   const NEXT_ACTS = new Set(['flashYes', 'flashNo', 'flashForgot', 'flashKeep', 'flashUndo', 'flashAgain', 'flashQuiz', 'flashMode', 'flashReset',
     'allNext', 'allPrev', 'allRestart', 'allType', 'allQuiz', 'allOrder', 'examGrade', 'examNext', 'examUndo', 'examStart', 'examQuit', 'examClose']);
-  function closeIfNext(act) { if (NEXT_ACTS.has(act)) { U.qExplainKey = null; U.explainKey = null; } }
+  function closeIfNext(act) { if (NEXT_ACTS.has(act)) { U.qExplainKey = null; U.explainKey = null; U.shortKey = null; } }
   function run(act, data) {
     if (!A[act]) return;
     closeIfNext(act);
